@@ -5,6 +5,7 @@ from discord import Embed, Game, Intents, Member, Message, Status, User, user
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from replit import db as Database
+from rpelit import Database as LocalDatabase
 
 from translate import get_command, get_sentence
 
@@ -17,6 +18,11 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Override database when local
+if Database is None:
+    Database = LocalDatabase(os.getenv("REPLIT_DB_URL"))
+
 
 # Deze calculatie was hell
 def burn_chance(time: int):
@@ -159,6 +165,7 @@ async def help(ctx):
 @tasks.loop(minutes=1)
 async def check_bake_time_loop():
     for user_id in Database:
+        print(Database[user_id])
         # Check entry in database
         try:
             entry = Database[user_id]
@@ -211,7 +218,7 @@ async def check_bake_time_loop():
                 user_id] = entry  # Update the entire entry in the database
 
 
-if os.environ.get('TOKEN') is None and:
+if os.environ['TOKEN'] is None:
     raise Exception(
         "You need to set the TOKEN secret that you got from your discord bot!")
 

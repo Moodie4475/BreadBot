@@ -162,4 +162,9 @@ async def check_bake_times():
             Database[user_id]['bake_time'] = new_bake_time
 
 
+if os.environ.get('TOKEN') is None:
+    raise Exception(
+        "You need to set the TOKEN environment variable from your discord bot!"
+    )
+
 bot.run(os.environ['TOKEN'])

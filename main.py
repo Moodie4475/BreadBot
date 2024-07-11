@@ -1,7 +1,7 @@
 import os
 import random
 
-from discord import Embed, Game, Intents, Member, Message, Status, User
+from discord import Embed, Game, Intents, Member, Message, Status, User, user
 from discord.ext import commands, tasks
 from replit import db as Database
 
@@ -12,7 +12,7 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 
 # Deze calculatie was hell
@@ -22,40 +22,44 @@ def burn_chance(time: int):
 
 async def check_bake_time(author: User | Member,
                           message: Message | None = None):
-
     user_id = str(author.id)
 
-    # database check
-    if user_id not in Database or Database[user_id]['bake_time'] is None:
+    # Database check
+    if user_id not in Database or Database[user_id].get('bake_time') is None:
         return
 
-    new_bake_time = Database[user_id]['bake_time'] - 1
-    if new_bake_time <= 0:
-        if random.random() < burn_chance(
-                Database[user_id]['bake_time_initial']):
+    entry = Database[user_id]
+    new_bake_time = entry.get('bake_time', 0) - 1
 
+    if new_bake_time <= 0:
+        if random.random() < burn_chance(entry.get('bake_time_initial', 0)):
             if message is not None:
                 await message.reply(get_sentence("burned", author.mention))
-
-            Database[user_id][
-                'xp'] += Database[user_id]['bake_time_initial'] // 2
+            xp = entry.get('xp', 0)
+            xp += entry.get('bake_time_initial', 0) // 2
+            entry['xp'] = xp
         else:
             if message is not None:
                 await message.reply(get_sentence("baked", author.mention))
+            bread_count = entry.get('bread_count', 0)
+            bread_count += 1
+            entry['bread_count'] = bread_count
+            xp = entry.get('xp', 0)
+            xp += entry.get('bake_time_initial', 0)
+            entry['xp'] = xp
 
-            Database[user_id]['bread_count'] += 1
-            Database[user_id]['xp'] += Database[user_id]['bake_time_initial']
-
-        Database[user_id]['bake_time'] = None
-        Database[user_id]['bake_time_initial'] = None
+        entry['bake_time'] = None
+        entry['bake_time_initial'] = None
     else:
-        Database[user_id]['bake_time'] = new_bake_time
+        entry['bake_time'] = new_bake_time
+
+    Database[user_id] = entry  # Update the entire entry in the database
 
 
 @bot.event
 async def on_ready():
     print(f'Logged in als {bot.user}')
-    check_bake_times.start()
+    check_bake_time_loop.start()
     await bot.change_presence(status=Status.online,
                               activity=Game(get_sentence('bot_status')))
 
@@ -71,16 +75,24 @@ async def on_message(message):
 
 
 @bot.command(name=get_command('bake'))
-async def bake(ctx: commands.Context, time: int):
+async def bake(ctx, time: int):
     if time <= 0:
         await ctx.reply(get_sentence('error_negative_time'))
         return
 
     user_id = str(ctx.author.id)
     if user_id not in Database:
-        Database[user_id] = {'bread_count': 0, 'bake_time': time}
+        Database[user_id] = {
+            'bread_count': 0,
+            'bake_time': time,
+            'bake_time_initial': time
+        }
+    elif Database[user_id]['bake_time'] is not None:
+        await ctx.reply(get_sentence('baking'))
+        return
     else:
         Database[user_id]['bake_time'] = time
+        Database[user_id]['bake_time_initial'] = time
 
     await ctx.reply(get_sentence('started', ctx.author.mention, time))
 
@@ -134,32 +146,66 @@ async def status(ctx):
         await ctx.reply(get_sentence('status_idle', ctx.author.mention))
 
 
-@tasks.loop(minutes=1)
-async def check_bake_times():
-    for user_id in Database:
-        if Database[user_id]['bake_time'] is None:
-            continue
+@bot.command(name='help')
+async def help(ctx):
+    newEmbed = Embed(title=get_sentence('help_title'),
+                     description=get_sentence('help_description'))
+    await ctx.reply(embed=newEmbed)
 
-        new_bake_time = Database[user_id]['bake_time'] - 1
+
+@tasks.loop(minutes=1)
+async def check_bake_time_loop():
+    for user_id in Database:
+        # Check entry in database
+        try:
+            entry = Database[user_id]
+            if entry is None:
+                raise KeyError('Entry is none')
+            # Access values safely using the 'get' method
+            bake_time = entry.get('bake_time', None)
+            bake_time_initial = entry.get('bake_time_initial', None)
+            if bake_time is None or bake_time_initial is None:
+                raise KeyError('bake_time or bake_time_initial is none')
+        except KeyError as e:
+            print(f"Possibly corrupt data for: {user_id}, Error: {e}")
+            # Reset their timed data
+            Database[user_id] = {
+                'bread_count': 0,  # Initialize bread_count as an integer
+                'bake_time': None,
+                'bake_time_initial': None
+            }
+            continue
+        except Exception as e:
+            print(f"Failed to get data for: {user_id}, Error: {e}")
+            continue
+        # Update the bake_time
+        new_bake_time = bake_time - 1
         if new_bake_time <= 0:
             author = await bot.fetch_user(int(user_id))
             channel = author.dm_channel or await author.create_dm()
-            if random.random() < burn_chance(
-                    Database[user_id]['bake_time_initial']):
-
+            if random.random() < burn_chance(bake_time_initial):
                 await channel.send(get_sentence("burned", author.mention))
-                Database[user_id][
-                    'xp'] += Database[user_id]['bake_time_initial'] // 2
+                xp = entry.get('xp', 0)  # Access xp using 'get'
+                xp += bake_time_initial // 2
+                entry['xp'] = xp
             else:
                 await channel.send(get_sentence("baked", author.mention))
-                Database[user_id]['bread_count'] += 1
-                Database[user_id]['xp'] += Database[user_id][
-                    'bake_time_initial']
-
-            Database[user_id]['bake_time'] = None
-            Database[user_id]['bake_time_initial'] = None
+                bread_count = entry.get('bread_count',
+                                        0)  # Access bread_count using 'get'
+                bread_count += 1  # Increment the bread_count
+                entry['bread_count'] = bread_count
+                xp = entry.get('xp', 0)  # Access xp using 'get'
+                xp += bake_time_initial
+                entry['xp'] = xp
+            # Update the bake_time in the database
+            entry['bake_time'] = None
+            entry['bake_time_initial'] = None
+            Database[
+                user_id] = entry  # Update the entire entry in the database
         else:
-            Database[user_id]['bake_time'] = new_bake_time
+            entry['bake_time'] = new_bake_time
+            Database[
+                user_id] = entry  # Update the entire entry in the database
 
 
 if os.environ.get('TOKEN') is None:

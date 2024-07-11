@@ -164,7 +164,6 @@ async def check_bake_times():
 
 if os.environ.get('TOKEN') is None:
     raise Exception(
-        "You need to set the TOKEN environment variable from your discord bot!"
-    )
+        "You need to set the TOKEN secret that you got from your discord bot!")
 
 bot.run(os.environ['TOKEN'])

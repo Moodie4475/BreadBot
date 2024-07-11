@@ -3,6 +3,7 @@ import random
 
 from discord import Embed, Game, Intents, Member, Message, Status, User, user
 from discord.ext import commands, tasks
+from dotenv import load_dotenv
 from replit import db as Database
 
 from translate import get_command, get_sentence
@@ -14,6 +15,8 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+# Load environment variables from .env file
+load_dotenv()
 
 # Deze calculatie was hell
 def burn_chance(time: int):
@@ -208,7 +211,7 @@ async def check_bake_time_loop():
                 user_id] = entry  # Update the entire entry in the database
 
 
-if os.environ.get('TOKEN') is None:
+if os.environ.get('TOKEN') is None and:
     raise Exception(
         "You need to set the TOKEN secret that you got from your discord bot!")
 

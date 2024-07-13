@@ -4,8 +4,8 @@ import random
 from discord import Embed, Game, Intents, Member, Message, Status, User, user
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
+from replit import Database as LocalDatabase
 from replit import db as Database
-from rpelit import Database as LocalDatabase
 
 from translate import get_command, get_sentence
 
